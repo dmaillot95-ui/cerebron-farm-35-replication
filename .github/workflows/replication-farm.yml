@@ -1,0 +1,81 @@
+name: CEREBRON Farm 35 Replication
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - {role: CLAIM_REPRODUCER, model: huggingface-projects/llama-3.2-3B-Instruct, focus: independent claim reproduction}
+          - {role: DERIVATION_REPLICATOR, model: huggingface-projects/gemma-2-9b-it, focus: independent derivation reconstruction}
+          - {role: ARITHMETIC_CHECKER, model: huggingface-projects/llama-3.2-3B-Instruct, focus: numerical and arithmetic replication}
+          - {role: DATA_PIPELINE_REPLICATOR, model: huggingface-projects/gemma-2-9b-it, focus: data transformation replication}
+          - {role: MODEL_REIMPLEMENTER, model: huggingface-projects/llama-3.2-3B-Instruct, focus: model reimplementation}
+          - {role: SIMULATION_REPLICATOR, model: huggingface-projects/gemma-2-9b-it, focus: simulation replication and divergence}
+          - {role: EXPERIMENT_PROTOCOL_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct, focus: protocol reproducibility}
+          - {role: PARAMETER_SENSITIVITY_REPLICATOR, model: huggingface-projects/gemma-2-9b-it, focus: assumption and parameter sensitivity}
+          - {role: BOUNDARY_CONDITION_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct, focus: boundary condition reproduction}
+          - {role: UNIT_DIMENSION_REPLICATOR, model: huggingface-projects/gemma-2-9b-it, focus: units and dimensional consistency}
+          - {role: STATISTICAL_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct, focus: statistical replication}
+          - {role: CAUSAL_REPLICATION_AUDITOR, model: huggingface-projects/gemma-2-9b-it, focus: causal claim reproducibility}
+          - {role: SOFTWARE_ENVIRONMENT_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct, focus: environment dependency replication}
+          - {role: CROSS_MODEL_REPLICATOR, model: huggingface-projects/gemma-2-9b-it, focus: cross-model independent reconstruction}
+          - {role: NEGATIVE_RESULT_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct, focus: reproduce failures and null results}
+          - {role: PROVENANCE_REPLICATION_AUDITOR, model: huggingface-projects/gemma-2-9b-it, focus: provenance and dependency reconstruction}
+          - {role: DISCREPANCY_ANALYST, model: huggingface-projects/llama-3.2-3B-Instruct, focus: discrepancy classification}
+          - {role: REPLICATION_RED_TEAM, model: huggingface-projects/gemma-2-9b-it, focus: attack false replication confidence}
+          - {role: INDEPENDENT_SECOND_REPLICATOR, model: huggingface-projects/llama-3.2-3B-Instruct, focus: second independent replication path}
+          - {role: OMEGA_REPLICATION_JUDGE, model: huggingface-projects/gemma-2-9b-it, focus: evidence-bounded replication synthesis}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -q hf-gradio
+      - name: Run real external replication role
+        continue-on-error: true
+        env:
+          ROLE: ${{ matrix.role }}
+          MODEL: ${{ matrix.model }}
+          FOCUS: ${{ matrix.focus }}
+        run: python worker/agent.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: farm35-${{ matrix.role }}
+          path: results/${{ matrix.role }}.json
+
+  omega:
+    if: always()
+    needs: agents
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: farm35-*
+          path: collected
+          merge-multiple: true
+      - name: Build Omega packet
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for p in glob.glob('collected/*.json'):
+              try: rows.append(json.load(open(p,encoding='utf-8')))
+              except Exception as e: rows.append({'file':p,'status':'ARTIFACT_PARSE_FAILED','error':repr(e)})
+          ok=[x for x in rows if x.get('inference_success') is True and x.get('status')=='UNREVIEWED_EXTERNAL_AGENT_OUTPUT']
+          packet={'farm':35,'name':'Replication','roles_expected':20,'roles_returned':len(rows),'successful_external_ai_calls':len(ok),'failed_external_ai_calls':len(rows)-len(ok),'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT' if ok else 'EXTERNAL_INFERENCE_FAILED','rules':['REPLICATION != REPHRASING','SAME DATA != INDEPENDENT EVIDENCE','SIMULATION != TEST','AGREEMENT != TRUTH','VERIFY BEFORE COMMIT'],'results':rows}
+          os.makedirs('omega',exist_ok=True)
+          json.dump(packet,open('omega/farm35-omega.json','w',encoding='utf-8'),ensure_ascii=False,indent=2)
+          print(json.dumps({k:v for k,v in packet.items() if k!='results'},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replication-farm-35-omega-packet
+          path: omega/farm35-omega.json

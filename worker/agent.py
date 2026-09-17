@@ -1,9 +1,11 @@
 import os,json,subprocess,hashlib,time
 from pathlib import Path
+from runtime_registry import load_context
 ROLE=os.getenv('ROLE','UNKNOWN_ROLE'); MODEL=os.getenv('MODEL','huggingface-projects/llama-3.2-3B-Instruct')
 FOCUS=os.getenv('FOCUS','independent replication')
 mission=Path('MISSION.md').read_text(encoding='utf-8')
-prompt=f'''You are {ROLE} in CEREBRON Omega Farm 35 Replication.\nFocus: {FOCUS}.\n{mission}\nProduce a concise auditable replication report. Separate reproduced facts, derivations, discrepancies, failed replication, unresolved unknowns, and decisive next test.'''
+registry_context,registry_meta=load_context(['constitution','disciplines','keys','banks'])
+prompt=f'''You are {ROLE} in CEREBRON Omega Farm 35 Replication.\nFocus: {FOCUS}.\n{mission}\nCEREBRON RUNTIME CONTEXT (shared registry; guidance only, provenance required):\n{registry_context}\nProduce a concise auditable replication report. Separate reproduced facts, derivations, discrepancies, failed replication, unresolved unknowns, and decisive next test.'''
 
 def run(cmd,t=240): return subprocess.run(cmd,text=True,capture_output=True,timeout=t)
 def make_payload(spec,p):
@@ -41,7 +43,7 @@ def invoke(space,p):
     return False,None,None,' | '.join(errors[-4:]) or 'no compatible endpoint'
 
 ok,text,endpoint,error=invoke(MODEL,prompt)
-out={'farm':35,'role':ROLE,'focus':FOCUS,'model':MODEL,'provider':'huggingface-space-zerogpu','inference_success':ok,'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT' if ok else 'EXTERNAL_INFERENCE_FAILED','api_name':endpoint,'output':text if ok else None,'error':error,'timestamp':int(time.time())}
+out={'farm':35,'role':ROLE,'focus':FOCUS,'model':MODEL,'provider':'huggingface-space-zerogpu','inference_success':ok,'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT' if ok else 'EXTERNAL_INFERENCE_FAILED','api_name':endpoint,'output':text if ok else None,'error':error,'registry_runtime':registry_meta,'timestamp':int(time.time())}
 if ok: out['output_sha256']=hashlib.sha256(text.encode()).hexdigest()
 Path('results').mkdir(exist_ok=True); Path(f'results/{ROLE}.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
-print(json.dumps({k:out.get(k) for k in ('role','model','inference_success','status','api_name','error')},ensure_ascii=False))
+print(json.dumps({k:out.get(k) for k in ('role','model','inference_success','status','api_name','error','registry_runtime')},ensure_ascii=False))
